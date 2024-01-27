@@ -3,9 +3,10 @@ port = 105 # Typical CCSO port is 105 (as for S/Gopher, no thank you)
 reload_cooldown = 60 # how frequently "reload" can be used in a command to reload the database (in seconds)
 encoding = "ascii"  # or utf-8?
 newline = "\r\n"
-server_status = []
 unique_fields = []
 database = []
+server_status = []
+siteinfo = []
 last_reload = 0
 
 # Field setup
@@ -17,7 +18,7 @@ always_fields = ["name"]
 search_fields = ["name", "species", "affiliation", "universe"]
 
 # Fields you can choose to specifically only see when doing a query
-filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age"]
+filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age", "summary"]
 
 from urllib.parse import unquote
 import asyncio
@@ -26,15 +27,23 @@ import json
 import time
 import re
 
+print('SomnolCCSO v0.2')
+
 def reload_db():
     global database
     global server_status
+    global siteinfo
     with open('entries.json', 'r') as d:
         database = json.load(d)
         print('Database read from entries.json')
     with open('status.txt', 'r') as u:
-        server_status = u.readlines()
+        for line in u:
+            server_status.append(line.rstrip('\n'))
         print('Server status read from status.txt')
+    with open('siteinfo.txt', 'r') as i:
+        for line in i:
+            siteinfo.append(line.rstrip('\n'))
+        print('Siteinfo read from siteinfo.txt')
 
 def find_all_fields():
     global unique_fields
@@ -88,6 +97,10 @@ class PhProtocol(asyncio.Protocol):
                     # reads server status from status.txt
                     resp = to_bytes(server_status)
                     self.transport.write(resp)
+                elif args[0] == 'siteinfo':
+                    # reads server information from siteinfo.txt
+                    resp = to_bytes(siteinfo)
+                    self.transport.write(resp)
                 elif args[0] == 'reload':
                     if (last_reload + 60) <= time.time():
                         reload_db()
@@ -100,7 +113,7 @@ class PhProtocol(asyncio.Protocol):
                     keywords = ''
                     _id = 0
 
-                    # Adding keywords onto fields if they're found in the dictionaries at the start
+                    # Adding keywords onto fields if they're found in the lists at the start
                     for field in unique_fields:
                         _id += 1
                         if field in search_fields:
@@ -191,7 +204,7 @@ class PhProtocol(asyncio.Protocol):
                             self.transport.write(resp)
                 # If the user inputs a quit command, terminate the connection
                 elif args[0] in ['quit', 'stop', 'exit']:
-                    print('Client wants to exit')
+                    print('Client has disconnected')
                     self.transport.write(to_bytes(nl('200:Bye!')))
                     self.transport.close()
                     break

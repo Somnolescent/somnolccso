@@ -1,0 +1,5 @@
+-200:SomnolCCSO v0.2
+-200:mailfield:email
+-200:mailbox:email
+-200:administrator:mariteaux@somnolescent.net
+-200:details:gopher://gopher.somnolescent.net/1/ccso/

@@ -35,9 +35,11 @@ port = 105  # Typical CCSO port is 105 (as for S/Gopher, no thank you)
 reload_cooldown = 60   # how frequently "reload" can be used in a command to reload the database
                        # (in seconds)
 
-search_fields = ["alias"]  # Fields that are labeled as indexable
+always_fields = ["name"] # These are fields that always get returned regardless of query
 
-filterable_fields = ["alias", "name", "discord", "email"]  # When doing returned data option "selected" only these and the indexable fields can be chosen to view
+search_fields = ["name", "species", "affiliation", "universe"]  # Fields that are labeled as indexable
+
+filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord"]  # When doing returned data option "selected" only these and the indexable fields can be chosen to view
 
 ###
 
@@ -84,7 +86,6 @@ class PhProtocol(asyncio.Protocol):
         print("Client: " + request)
         commands = request.split('\r\n')
         print(commands)
-        #print(args[0])
         for cmd in commands:
             if 'reload' in cmd:
                 if (last_reload + 60) <= time.time():
@@ -118,17 +119,9 @@ class PhProtocol(asyncio.Protocol):
                             results.append('-200:' + str(_id) + ':' + field + ':' + field.title())
 
                     results.append(nl('200:Ok.'))
-
-                    # for r in results:
-                    #     print(r)
-
                     resp = to_bytes(results)
                     self.transport.write(resp)
                 elif args[0] == 'query':
-                    # query email="something something" return all
-                    # query email="something something" return discord, email
-                    # query email="something something"
-
                     if not 'return' in cmd:
                         cmd += " return all"
 

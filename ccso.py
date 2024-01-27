@@ -110,16 +110,20 @@ class PhProtocol(asyncio.Protocol):
                                 unique_fields.append(field)
 
                     results = []
+                    keywords = ''
 
                     _id = 0
-                    for field in unique_fields:
+                    for field in filterable_fields:
                         _id += 1
-                        if field in search_fields or len(search_fields) == 0:
-                            results.append('-200:' + str(_id) + ':' + field + ':max 64 Indexed Lookup Public Default')
-                            results.append('-200:' + str(_id) + ':' + field + ':' + field.title())
-                        elif field in filterable_fields:
-                            results.append('-200:' + str(_id) + ':' + field + ':max 64 Default')
-                            results.append('-200:' + str(_id) + ':' + field + ':' + field.title())
+                        if field in search_fields:
+                            keywords += 'Indexed Lookup '
+                        if field in always_fields:
+                            keywords += 'Always '
+                        if field in filterable_fields:
+                            keywords += 'Default'
+                        results.append('-200:' + str(_id) + ':' + field + ' max 64 ' + keywords)
+                        results.append('-200:' + str(_id) + ':' + field + ': ' + field.title())
+                        keywords = ''
 
                     results.append(nl('200:Ok.'))
                     resp = to_bytes(results)

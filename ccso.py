@@ -29,6 +29,18 @@ import re
 
 print('SomnolCCSO v0.2')
 
+# For sending lines to the client that will need a newline afterwards
+def nl(x=''):
+    return str(x) + newline
+
+# Encoding strings into bytes
+def to_bytes(x):
+    if isinstance(x, list):
+        return bytes(newline.join(x), encoding)
+    else:
+        return bytes(str(x), encoding)
+
+# Reload all files
 def reload_db():
     global database
     global server_status
@@ -39,10 +51,12 @@ def reload_db():
     with open('status.txt', 'r') as u:
         for line in u:
             server_status.append(line.rstrip('\n'))
+        server_status.append(nl('200:Ok.'))
         print('Server status read from status.txt')
     with open('siteinfo.txt', 'r') as i:
         for line in i:
             siteinfo.append(line.rstrip('\n'))
+        siteinfo.append(nl('200:Ok.'))
         print('Siteinfo read from siteinfo.txt')
 
 def find_all_fields():
@@ -55,17 +69,6 @@ def find_all_fields():
 
 # Read database for first boot
 reload_db()
-
-# For sending lines to the client that will need a newline afterwards
-def nl(x=''):
-    return str(x) + newline
-
-# Encoding strings into bytes
-def to_bytes(x):
-    if isinstance(x, list):
-        return bytes(newline.join(x), encoding)
-    else:
-        return bytes(str(x), encoding)
 
 class PhProtocol(asyncio.Protocol):
     # Start the connection, print to console who dis

@@ -3,8 +3,9 @@ port = 105 # Typical CCSO port is 105 (as for S/Gopher, no thank you)
 reload_cooldown = 60 # how frequently "reload" can be used in a command to reload the database (in seconds)
 encoding = "ascii"  # or utf-8?
 newline = "\r\n"
+server_status = []
 unique_fields = []
-x = ['quit', 'stop', 'exit']  # exit commands
+database = []
 last_reload = 0
 
 # Field setup
@@ -13,7 +14,7 @@ last_reload = 0
 always_fields = ["name"]
 
 # Fields that are labeled as indexable (you'll need at least one to be able to do searches in some if not all clients)
-search_fields = ["name", "species", "affiliation", "universe"] 
+search_fields = ["name", "species", "affiliation", "universe"]
 
 # Fields you can choose to specifically only see when doing a query
 filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age"]
@@ -25,16 +26,18 @@ import json
 import time
 import re
 
-database = []
-
 def reload_db():
     global database
-    with open('entries.json', 'r') as f:
-        database = json.load(f)
+    global server_status
+    with open('entries.json', 'r') as d:
+        database = json.load(d)
         print('Database read from entries.json')
+    with open('status.txt', 'r') as u:
+        server_status = u.readlines()
+        print('Server status read from status.txt')
 
 def find_all_fields():
-    unique_fields = []
+    global unique_fields
 
     for entry in database:
         for field in entry:
@@ -60,7 +63,7 @@ class PhProtocol(asyncio.Protocol):
     def connection_made(self, transport):
         self.transport = transport
         print('Connected by', transport.get_extra_info('peername'))
-    
+
     def data_received(self, data):
         global last_reload
 
@@ -82,9 +85,9 @@ class PhProtocol(asyncio.Protocol):
             print('', args)
             try:
                 if args[0] == 'status':
-                    # Hardcoded server status for now
-                    # I'm tempted to make this read from a file for cleanliness
-                    self.transport.write(to_bytes(nl('201:Database ready, read-only.')))
+                    # reads server status from status.txt
+                    resp = to_bytes(server_status)
+                    self.transport.write(resp)
                 elif args[0] == 'reload':
                     if (last_reload + 60) <= time.time():
                         reload_db()
@@ -110,6 +113,7 @@ class PhProtocol(asyncio.Protocol):
                         results.append('-200:' + str(_id) + ':' + field + ': ' + field.title())
                         keywords = ''
 
+                    # Acknowledgement that the command finished regardless of result
                     results.append(nl('200:Ok.'))
 
                     resp = to_bytes(results)
@@ -131,7 +135,7 @@ class PhProtocol(asyncio.Protocol):
 
                         for match in matches:
                             criteria[match.group(1)] = match.group(2)
-                        
+
                         # Check to make sure this field actually exists please
                         find_all_fields()
 
@@ -140,12 +144,12 @@ class PhProtocol(asyncio.Protocol):
                         else:
                             # Splits the list of fields to return into its own variable for later checking
                             return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
-                        
+
                             _all = False
-                        
+
                             if 'all' in return_fields:
                                 _all = True
-                        
+
                             results = []
                             entry = 0
 
@@ -175,17 +179,18 @@ class PhProtocol(asyncio.Protocol):
                                             # If you're looking for a field that doesn't exist in entry, error
                                             self.transport.write(to_bytes(nl('508:Field is not present in requested entries.')))
                                             break
+
                             # Acknowledgement that the command finished regardless of result
                             results.append(nl('200:Ok.'))
-                        
+
                             # Print to console for debugging purposes
                             for r in results:
                                 print(r)
-                        
+
                             resp = to_bytes(results)
                             self.transport.write(resp)
-                # If the user inputs quit, exit, or stop, terminate the connection
-                elif args[0] in x:
+                # If the user inputs a quit command, terminate the connection
+                elif args[0] in ['quit', 'stop', 'exit']:
                     print('Client wants to exit')
                     self.transport.write(to_bytes(nl('200:Bye!')))
                     self.transport.close()
@@ -196,8 +201,7 @@ class PhProtocol(asyncio.Protocol):
             # Any generic errors get caught and return 400
             except Exception as e:
                 traceback.print_exc()
-                resp = to_bytes(nl("400:Server error occurred. That gets a yikes from me."))
-                self.transport.write(resp)
+                self.transport.write(to_bytes(nl("400:Server error occurred. That gets a yikes from me.")))
 
 async def main(h, p):
     loop = asyncio.get_running_loop()

@@ -1,0 +1,3 @@
+100:SomnolCCSO v0.2
+100:Serving all your "who are these people" needs since 2024
+201:Database ready, read-only.

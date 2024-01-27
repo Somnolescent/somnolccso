@@ -42,7 +42,7 @@ search_fields = ["name", "species", "affiliation", "universe"]  # Fields that ar
 filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord"]  # When doing returned data option "selected" only these and the indexable fields can be chosen to view
 
 ###
-
+from urllib.parse import unquote
 import asyncio
 import traceback
 import json
@@ -83,6 +83,9 @@ class PhProtocol(asyncio.Protocol):
         global last_reload
         # self.transport.write(data)
         request = data.decode('utf-8')
+        # Scrub command specifically for NSCA Mosaic, the asshole client from hell
+        request = unquote(request)
+        request = request.replace('/', '')
         print("Client: " + request)
         commands = request.split('\r\n')
         print(commands)

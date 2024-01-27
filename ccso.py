@@ -118,7 +118,7 @@ class PhProtocol(asyncio.Protocol):
                         last_reload = time.time()
                         self.transport.write(to_bytes(nl('200:Ok.')))
                     else:
-                        self.transport.write(to_bytes(nl('520:Please wait ', (last_reload + reload_cooldown) - time.time(), ' seconds to reload')))
+                        self.transport.write(to_bytes(nl('520:Please wait ' + str(int((last_reload + reload_cooldown) - time.time())) + ' seconds to reload')))
                         if verbose:
                             print('Client tried to reload database too quickly! Wait ', (last_reload + reload_cooldown) - time.time(), ' seconds to reload')
                 elif args[0] == 'fields':

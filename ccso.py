@@ -1,59 +1,29 @@
-## Read-only CCSO server for Python 3.7+ by dotcomboom for somnol
-## Originally worked on ~5/29/2019, finished 7/6/2020
-## What is implemented:
-##   - "status" command
-##   - "fields" command
-##      - Title-cases fields for the frontend's description
-##   - query command
-##   - reload when any command passed has "reload" in it (with cooldown)
-##   - reading entries from json
+# Initialization
+port = 105 # Typical CCSO port is 105 (as for S/Gopher, no thank you)
+reload_cooldown = 60 # how frequently "reload" can be used in a command to reload the database (in seconds)
+encoding = "ascii"  # or utf-8?
+newline = "\r\n"
+unique_fields = []
+x = ['quit', 'stop', 'exit']  # exit commands
+last_reload = 0
 
-## If using OverbiteFF, queries must be like name="bob" at this time
+# Field setup
+# These are our field choices--you can set your own as necessary
+# These are fields that always get returned regardless of query
+always_fields = ["name"]
 
-## Sample entries.json
+# Fields that are labeled as indexable (you'll need at least one to be able to do searches in some if not all clients)
+search_fields = ["name", "species", "affiliation", "universe"] 
 
-# [
-#     {
-#         "alias": "b-smith",
-#         "name": "smith bob c.",
-#         "discord": "bsmith#0000",
-#         "email": "b-smith@example.edu"
-#     },
-#     {
-#         "alias": "j-smith",
-#         "name": "smith john z.",
-#         "slack": "\"delete this\"",
-#         "email": "j-smith@example.edu"
-#     }
-# ]
+# Fields you can choose to specifically only see when doing a query
+filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age"]
 
-## Add as many fields as necessary
-
-### Config
-
-port = 105  # Typical CCSO port is 105 (as for S/Gopher, no thank you)
-reload_cooldown = 60   # how frequently "reload" can be used in a command to reload the database
-                       # (in seconds)
-
-always_fields = ["name"] # These are fields that always get returned regardless of query
-
-search_fields = ["name", "species", "affiliation", "universe"]  # Fields that are labeled as indexable
-
-filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord"]  # When doing returned data option "selected" only these and the indexable fields can be chosen to view
-
-###
 from urllib.parse import unquote
 import asyncio
 import traceback
 import json
 import time
 import re
-
-encoding = "ascii"  # or utf-8?
-newline = "\r\n"
-x = ['quit', 'stop', 'exit']  # exit commands
-
-last_reload = 0
 
 database = []
 
@@ -63,11 +33,22 @@ def reload_db():
         database = json.load(f)
         print('Database read from entries.json')
 
+def find_all_fields():
+    unique_fields = []
+
+    for entry in database:
+        for field in entry:
+            if not field in unique_fields:
+                unique_fields.append(field)
+
+# Read database for first boot
 reload_db()
 
+# For sending lines to the client that will need a newline afterwards
 def nl(x=''):
     return str(x) + newline
 
+# Encoding strings into bytes
 def to_bytes(x):
     if isinstance(x, list):
         return bytes(newline.join(x), encoding)
@@ -75,25 +56,34 @@ def to_bytes(x):
         return bytes(str(x), encoding)
 
 class PhProtocol(asyncio.Protocol):
+    # Start the connection, print to console who dis
     def connection_made(self, transport):
         self.transport = transport
         print('Connected by', transport.get_extra_info('peername'))
     
     def data_received(self, data):
         global last_reload
-        # self.transport.write(data)
+
         request = data.decode('utf-8')
+
         # Scrub command specifically for NSCA Mosaic, the asshole client from hell
+        # Also I guess any other clients that want to do percent encoding
         request = unquote(request)
         request = request.replace('/', '')
+
+        # spits the raw request out into the console for debugging purposes
         print("Client: " + request)
         commands = request.split('\r\n')
         print(commands)
+
+        # All implemented CCSO commands:
         for cmd in commands:
             args = cmd.split(' ')
             print('', args)
             try:
                 if args[0] == 'status':
+                    # Hardcoded server status for now
+                    # I'm tempted to make this read from a file for cleanliness
                     self.transport.write(to_bytes(nl('201:Database ready, read-only.')))
                 elif args[0] == 'reload':
                     if (last_reload + 60) <= time.time():
@@ -102,18 +92,13 @@ class PhProtocol(asyncio.Protocol):
                     else:
                         print('-- Please wait', (last_reload + reload_cooldown) - time.time(), 'seconds to reload --')
                 elif args[0] == 'fields':
-                    unique_fields = []
-
-                    for entry in database:
-                        for field in entry:
-                            if not field in unique_fields:
-                                unique_fields.append(field)
-
+                    find_all_fields()
                     results = []
                     keywords = ''
-
                     _id = 0
-                    for field in filterable_fields:
+
+                    # Adding keywords onto fields if they're found in the dictionaries at the start
+                    for field in unique_fields:
                         _id += 1
                         if field in search_fields:
                             keywords += 'Indexed Lookup '
@@ -121,40 +106,39 @@ class PhProtocol(asyncio.Protocol):
                             keywords += 'Always '
                         if field in filterable_fields:
                             keywords += 'Default'
-                        results.append('-200:' + str(_id) + ':' + field + ' max 64 ' + keywords)
+                        results.append('-200:' + str(_id) + ':' + field + 'max 64 ' + keywords)
                         results.append('-200:' + str(_id) + ':' + field + ': ' + field.title())
                         keywords = ''
 
                     results.append(nl('200:Ok.'))
+
                     resp = to_bytes(results)
                     self.transport.write(resp)
                 elif args[0] == 'query':
+                    # If the user didn't specify any fields to return, return all attached to matched entries
                     if not 'return' in cmd:
                         cmd += " return all"
 
                     criteria = {}
                     matches = ''
-                    
+
+                    # If this isn't a syntactically-valid query, error out
                     if re.search(r'(\S*)="([^"]*)"', cmd) is None:
                         self.transport.write(to_bytes(nl('512:Illegal value. All queries need to be formed as [field]="[search]", ie universe="pennyverse".')))
                     else:
+                        # If this is a syntactically-valid query, go ahead and split it for processing
                         matches = re.finditer(r'(\S*)="([^"]*)"', cmd)
 
                         for match in matches:
                             criteria[match.group(1)] = match.group(2)
                         
-                        # Check to make sure the field actually exists anywhere please
-                        # also dcb i got rid of this in the fields command implementation because of how wacky our fields are in this database, so i had to bring it back here
-                        unique_fields = []
-                        
-                        for entry in database:
-                            for field in entry:
-                                if not field in unique_fields:
-                                    unique_fields.append(field)
-                        
+                        # Check to make sure this field actually exists please
+                        find_all_fields()
+
                         if not (list(criteria.keys())[0]) in unique_fields:
                             self.transport.write(to_bytes(nl('507:Field does not exist.')))
                         else:
+                            # Splits the list of fields to return into its own variable for later checking
                             return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
                         
                             _all = False
@@ -164,8 +148,12 @@ class PhProtocol(asyncio.Protocol):
                         
                             results = []
                             entry = 0
+
+                            # Now we run through each item in entries.json to find matches
                             for item in database:
                                 entry += 1
+                                # Defaults to "do not return" to avoid being able to dump the entire database
+                                # Which was possible with the first version :marf:
                                 meets_criteria = False
                                 for key in criteria:
                                     if key in item:
@@ -179,30 +167,37 @@ class PhProtocol(asyncio.Protocol):
                                         break
                                 if meets_criteria:
                                     for field in database[entry - 1]:
-                                        if not return_fields in unique_fields:
+                                        if field in filterable_fields or _all:
+                                            if (field in return_fields) or (field in always_fields) or _all:
+                                                # Return the query!
+                                                results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
+                                        else:
+                                            # If you're looking for a field that doesn't exist in entry, error
                                             self.transport.write(to_bytes(nl('508:Field is not present in requested entries.')))
                                             break
-                                        elif (field in return_fields) or (field in always_fields) or _all:
-                                            results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
+                            # Acknowledgement that the command finished regardless of result
                             results.append(nl('200:Ok.'))
                         
+                            # Print to console for debugging purposes
                             for r in results:
                                 print(r)
                         
                             resp = to_bytes(results)
                             self.transport.write(resp)
+                # If the user inputs quit, exit, or stop, terminate the connection
                 elif args[0] in x:
                     print('Client wants to exit')
                     self.transport.write(to_bytes(nl('200:Bye!')))
                     self.transport.close()
                     break
+                # If you try to put in anything other than status, fields, reload, or query
                 elif args[0] != "":
                     self.transport.write(to_bytes(nl('514:Unknown command.')))
+            # Any generic errors get caught and return 400
             except Exception as e:
                 traceback.print_exc()
                 resp = to_bytes(nl("400:Server error occurred. That gets a yikes from me."))
                 self.transport.write(resp)
-
 
 async def main(h, p):
     loop = asyncio.get_running_loop()

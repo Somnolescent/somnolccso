@@ -133,43 +133,64 @@ class PhProtocol(asyncio.Protocol):
                         cmd += " return all"
 
                     criteria = {}
+                    matches = ''
+                    
+                    if re.search(r'(\S*)="([^"]*)"', cmd) is None:
+                        self.transport.write(to_bytes(nl('512:Illegal value. All queries need to be formed as [field]="[search]", ie universe="pennyverse".')))
+                    else:
+                        matches = re.finditer(r'(\S*)="([^"]*)"', cmd)
 
-                    matches = re.finditer(r'(\S*)="([^"]*)"', cmd)
-
-                    for match in matches:
-                        criteria[match.group(1)] = match.group(2)
-
-                    return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
-
-                    _all = False
-
-                    if 'all' in return_fields:
-                        _all = True
-
-                    results = []
-                    entry = 0
-                    for item in database:
-                        entry += 1
-                        meets_criteria = True
-                        for key in criteria:
-                            if key in item:
-                                if not criteria[key].lower() in item[key].lower():
-                                    meets_criteria = False
-                                    break
-                            else:
+                        for match in matches:
+                            criteria[match.group(1)] = match.group(2)
+                        
+                        # Check to make sure the field actually exists anywhere please
+                        # also dcb i got rid of this in the fields command implementation because of how wacky our fields are in this database, so i had to bring it back here
+                        unique_fields = []
+                        
+                        for entry in database:
+                            for field in entry:
+                                if not field in unique_fields:
+                                    unique_fields.append(field)
+                        
+                        if not (list(criteria.keys())[0]) in unique_fields:
+                            self.transport.write(to_bytes(nl('507:Field does not exist.')))
+                        else:
+                            return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
+                        
+                            _all = False
+                        
+                            if 'all' in return_fields:
+                                _all = True
+                        
+                            results = []
+                            entry = 0
+                            for item in database:
+                                entry += 1
                                 meets_criteria = False
-                                break
-                        if meets_criteria:
-                            for field in database[entry - 1]:
-                                if field in return_fields or _all:
-                                    results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
-                    results.append(nl('200:Ok.'))
-
-                    for r in results:
-                        print(r)
-
-                    resp = to_bytes(results)
-                    self.transport.write(resp)
+                                for key in criteria:
+                                    if key in item:
+                                        if not criteria[key].lower() in item[key].lower():
+                                            meets_criteria = False
+                                            break
+                                        else:
+                                            meets_criteria = True
+                                    else:
+                                        meets_criteria = False
+                                        break
+                                if meets_criteria:
+                                    for field in database[entry - 1]:
+                                        if not return_fields in unique_fields:
+                                            self.transport.write(to_bytes(nl('508:Field is not present in requested entries.')))
+                                            break
+                                        elif (field in return_fields) or (field in always_fields) or _all:
+                                            results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
+                            results.append(nl('200:Ok.'))
+                        
+                            for r in results:
+                                print(r)
+                        
+                            resp = to_bytes(results)
+                            self.transport.write(resp)
                 elif args[0] in x:
                     print('Client wants to exit')
                     self.transport.write(to_bytes(nl('200:Bye!')))

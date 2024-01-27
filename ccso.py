@@ -90,17 +90,17 @@ class PhProtocol(asyncio.Protocol):
         commands = request.split('\r\n')
         print(commands)
         for cmd in commands:
-            if 'reload' in cmd:
-                if (last_reload + 60) <= time.time():
-                    reload_db()
-                    last_reload = time.time()
-                else:
-                    print('-- Please wait', (last_reload + reload_cooldown) - time.time(), 'seconds to reload --')
             args = cmd.split(' ')
             print('', args)
             try:
                 if args[0] == 'status':
                     self.transport.write(to_bytes(nl('201:Database ready, read-only.')))
+                elif args[0] == 'reload':
+                    if (last_reload + 60) <= time.time():
+                        reload_db()
+                        last_reload = time.time()
+                    else:
+                        print('-- Please wait', (last_reload + reload_cooldown) - time.time(), 'seconds to reload --')
                 elif args[0] == 'fields':
                     unique_fields = []
 

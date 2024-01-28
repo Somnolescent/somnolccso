@@ -1,32 +1,38 @@
-# Initialization
-port = 105 # Typical CCSO port is 105 (as for S/Gopher, no thank you)
-reload_cooldown = 60 # how frequently "reload" can be used in a command to reload the database (in seconds)
-encoding = "ascii"  # or utf-8?
-newline = "\r\n"
-unique_fields = []
-database = []
-server_status = []
-siteinfo = []
-last_reload = 0
-verbose = True # If this is set, SomnolCCSO will pipe returns to the local console for ease of debugging
-
-# Field setup
-# These are our field choices--you can set your own as necessary
-# These are fields that always get returned regardless of query
-always_fields = ["name"]
-
-# Fields that are labeled as indexable (you'll need at least one to be able to do searches in some if not all clients)
-search_fields = ["name", "species", "affiliation", "universe"]
-
-# Fields you can choose to specifically only see when doing a query
-filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age", "summary", "projects"]
-
 from urllib.parse import unquote
 import asyncio
 import traceback
 import json
 import time
 import re
+
+# Initialization
+# Typical CCSO port is 105 (as for S/Gopher, no thank you)
+port = 105
+# how frequently reload can be used to reload the database (in seconds)
+reload_cooldown = 60
+# If set, SomnolCCSO will pipe returns to the console for debugging
+verbose = False
+encoding = 'ascii'
+newline = '\r\n'
+
+unique_fields = []
+database = []
+server_status = []
+siteinfo = []
+last_reload = 0
+
+# Field setup
+# These are our field choices--you can set your own as necessary
+# These are fields that always get returned regardless of query
+always_fields = ['name']
+
+# Fields that are labeled as indexable (you'll need at least one to be
+# able to do searches in some if not all clients)
+search_fields = ['name', 'species', 'affiliation', 'universe']
+
+# Fields you can choose to specifically only see when doing a query
+filterable_fields = ['name', 'sex', 'species', 'affiliation', 'universe',
+'site', 'email', 'discord', 'age', 'summary', 'projects']
 
 print('SomnolCCSO v0.2')
 
@@ -82,13 +88,13 @@ class PhProtocol(asyncio.Protocol):
 
         request = data.decode('utf-8')
 
-        # Scrub command specifically for NSCA Mosaic, the asshole client from hell
-        # Also I guess any other clients that want to do percent encoding
+        # Scrub command for NSCA Mosaic, the asshole client from hell
+        # Also any other clients that want to do percent encoding
         request = unquote(request)
         request = request.replace('/', '')
 
-        # spits the raw request out into the console for debugging purposes
-        print("Client: " + request)
+        # spits the raw request out into the console for debugging
+        print('Client: ' + request)
         commands = request.split('\r\n')
         print(commands)
 
@@ -142,7 +148,7 @@ class PhProtocol(asyncio.Protocol):
                 elif args[0] == 'query':
                     # If the user didn't specify any fields to return, return all attached to matched entries
                     if not 'return' in cmd:
-                        cmd += " return all"
+                        cmd += ' return all'
 
                     criteria = {}
                     matches = ''
@@ -171,7 +177,7 @@ class PhProtocol(asyncio.Protocol):
 
                             if 'all' in return_fields:
                                 _all = True
-                                return_fields.remove("all")
+                                return_fields.remove('all')
 
                             results = []
                             entry = 0
@@ -233,12 +239,12 @@ class PhProtocol(asyncio.Protocol):
                     self.transport.close()
                     break
                 # If you try to put in anything other than status, fields, reload, or query
-                elif args[0] != "":
+                elif args[0] != '':
                     self.transport.write(to_bytes(nl('514:Unknown command.')))
             # Any generic errors get caught and return 400
             except Exception as e:
                 traceback.print_exc()
-                self.transport.write(to_bytes(nl("400:Server error occurred. That gets a yikes from me.")))
+                self.transport.write(to_bytes(nl('400:Server error occurred. That gets a yikes from me.')))
 
 async def main(h, p):
     loop = asyncio.get_running_loop()

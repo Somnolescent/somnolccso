@@ -8,6 +8,7 @@ database = []
 server_status = []
 siteinfo = []
 last_reload = 0
+verbose = True # If this is set, SomnolCCSO will pipe returns to the local console for ease of debugging
 
 # Field setup
 # These are our field choices--you can set your own as necessary
@@ -94,7 +95,8 @@ class PhProtocol(asyncio.Protocol):
         # All implemented CCSO commands:
         for cmd in commands:
             args = cmd.split(' ')
-            print('', args)
+            if verbose:
+                print('', args)
             try:
                 if args[0] == 'status':
                     # reads server status from status.txt
@@ -108,8 +110,11 @@ class PhProtocol(asyncio.Protocol):
                     if (last_reload + 60) <= time.time():
                         reload_db()
                         last_reload = time.time()
+                        self.transport.write(to_bytes(nl('200:Ok.')))
                     else:
-                        print('-- Please wait', (last_reload + reload_cooldown) - time.time(), 'seconds to reload --')
+                        self.transport.write(to_bytes(nl('520:Please wait ', (last_reload + reload_cooldown) - time.time(), ' seconds to reload')))
+                        if verbose:
+                            print('Client tried to reload database too quickly! Wait ', (last_reload + reload_cooldown) - time.time(), ' seconds to reload')
                 elif args[0] == 'fields':
                     find_all_fields()
                     results = []
@@ -200,8 +205,9 @@ class PhProtocol(asyncio.Protocol):
                             results.append(nl('200:Ok.'))
 
                             # Print to console for debugging purposes
-                            for r in results:
-                                print(r)
+                            if verbose:
+                                for r in results:
+                                    print(r)
 
                             resp = to_bytes(results)
                             self.transport.write(resp)

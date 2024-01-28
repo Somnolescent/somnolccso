@@ -19,7 +19,7 @@ always_fields = ["name"]
 search_fields = ["name", "species", "affiliation", "universe"]
 
 # Fields you can choose to specifically only see when doing a query
-filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age", "summary"]
+filterable_fields = ["name", "sex", "species", "affiliation", "universe", "site", "email", "discord", "age", "summary", "projects"]
 
 from urllib.parse import unquote
 import asyncio
@@ -163,16 +163,23 @@ class PhProtocol(asyncio.Protocol):
                         if not (list(criteria.keys())[0]) in unique_fields:
                             self.transport.write(to_bytes(nl('507:Field does not exist.')))
                         else:
-                            # Splits the list of fields to return into its own variable for later checking
+                            # Splits the list of fields to return into its own list for later checking
                             return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
+                            return_fields = always_fields + return_fields
 
                             _all = False
 
                             if 'all' in return_fields:
                                 _all = True
+                                return_fields.remove("all")
 
                             results = []
                             entry = 0
+
+                            # These are to provide better error handling later on
+                            # Before, we were reliant on else statements for error handling and those didn't work across an entire dataset, just one entry
+                            found_one_match = False
+                            found_field = False
 
                             # Now we run through each item in entries.json to find matches
                             for item in database:
@@ -187,19 +194,27 @@ class PhProtocol(asyncio.Protocol):
                                             break
                                         else:
                                             meets_criteria = True
+                                            found_one_match = True
                                     else:
                                         meets_criteria = False
                                         break
                                 if meets_criteria:
-                                    for field in database[entry - 1]:
-                                        if field in filterable_fields or _all:
-                                            if (field in return_fields) or (field in always_fields) or _all:
-                                                # Return the query!
+                                    if _all:
+                                            for field in list(database[entry - 1]):
+                                                found_field = True
                                                 results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
-                                        else:
-                                            # If you're looking for a field that doesn't exist in entry, error
-                                            self.transport.write(to_bytes(nl('508:Field is not present in requested entries.')))
-                                            break
+                                    else:
+                                        for field in return_fields:
+                                            if (field in list(database[entry - 1])) and (field in filterable_fields) or _all:
+                                                found_field = True
+                                                results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
+
+                            if not found_one_match:
+                                # If you found nothing, error out
+                                results.append(nl('502:No matches to query.'))
+                            elif not found_field:
+                                # We found something, just not what the user wanted
+                                results.append(nl('508:Field is not present in requested entries.'))
 
                             # Acknowledgement that the command finished regardless of result
                             results.append(nl('200:Ok.'))

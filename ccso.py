@@ -169,11 +169,16 @@ class PhProtocol(asyncio.Protocol):
                         if not (list(criteria.keys())[0]) in unique_fields:
                             self.transport.write(to_bytes(nl('507:Field does not exist.')))
                         else:
-                            # Splits the list of fields to return into its own list for later checking
-                            return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
-                            return_fields = always_fields + return_fields
-
                             _all = False
+                            return_fields = []
+
+                            # The if protects against an edge case where the user types "return" but specifies no fields
+                            if re.match(r'.* return', cmd) and not re.match(r'.* return (.*)', cmd):
+                                return_fields.append('all')
+                            # Splits the list of fields to return into its own list for later checking
+                            else:
+                                return_fields = re.match(r'.* return (.*)', cmd).group(1).split(' ')
+                                return_fields = always_fields + return_fields
 
                             if 'all' in return_fields:
                                 _all = True

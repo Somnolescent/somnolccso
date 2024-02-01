@@ -1,6 +1,8 @@
 from urllib.parse import unquote
 import asyncio
 import traceback
+import logging
+import sys
 import json
 import time
 import re
@@ -10,8 +12,6 @@ import re
 port = 105
 # how frequently reload can be used to reload the database (in seconds)
 reload_cooldown = 60
-# If set, SomnolCCSO will pipe returns to the console for debugging
-verbose = False
 encoding = 'ascii'
 newline = '\r\n'
 
@@ -34,7 +34,15 @@ search_fields = ['name', 'species', 'affiliation', 'universe']
 filterable_fields = ['name', 'sex', 'species', 'affiliation', 'universe',
 'site', 'email', 'discord', 'age', 'summary', 'projects']
 
-print('SomnolCCSO v0.2')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s: %(message)s',
+    handlers=[
+        logging.FileHandler('ccso.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger('logger')
 
 # For sending lines to the client that will need a newline afterwards
 def nl(x=''):
@@ -54,17 +62,17 @@ def reload_db():
     global siteinfo
     with open('entries.json', 'r') as d:
         database = json.load(d)
-        print('Database read from entries.json')
+        logger.info('Database read from entries.json')
     with open('status.txt', 'r') as u:
         for line in u:
             server_status.append(line.rstrip('\n'))
         server_status.append(nl('200:Ok.'))
-        print('Server status read from status.txt')
+        logger.info('Server status read from status.txt')
     with open('siteinfo.txt', 'r') as i:
         for line in i:
             siteinfo.append(line.rstrip('\n'))
         siteinfo.append(nl('200:Ok.'))
-        print('Siteinfo read from siteinfo.txt')
+        logger.info('Siteinfo read from siteinfo.txt')
 
 def find_all_fields():
     global unique_fields
@@ -74,6 +82,8 @@ def find_all_fields():
             if not field in unique_fields:
                 unique_fields.append(field)
 
+logger.info('SomnolCCSO v0.3 started')
+
 # Read database for first boot
 reload_db()
 
@@ -81,7 +91,7 @@ class PhProtocol(asyncio.Protocol):
     # Start the connection, print to console who dis
     def connection_made(self, transport):
         self.transport = transport
-        print('Connected by', transport.get_extra_info('peername'))
+        logger.info('Connected by ' + str(transport.get_extra_info('peername')))
 
     def data_received(self, data):
         global last_reload
@@ -95,15 +105,12 @@ class PhProtocol(asyncio.Protocol):
         request = request.strip('\r\n/')
 
         # spits the raw request out into the console for debugging
-        print('Client: ' + request)
+        logger.info('Client: %s', request)
         commands = request.split('\r\n')
-        print(commands)
 
         # All implemented CCSO commands:
         for cmd in commands:
             args = cmd.split(' ')
-            if verbose:
-                print('', args)
             try:
                 if args[0] == 'status':
                     # reads server status from status.txt
@@ -117,11 +124,11 @@ class PhProtocol(asyncio.Protocol):
                     if (last_reload + 60) <= time.time():
                         reload_db()
                         last_reload = time.time()
-                        self.transport.write(to_bytes(nl('200:Ok.')))
+                        self.transport.write(to_bytes(nl('200:Database successfully reloaded.')))
+                        logger.info('Database successfully reloaded')
                     else:
                         self.transport.write(to_bytes(nl('520:Please wait ' + str(int((last_reload + reload_cooldown) - time.time())) + ' seconds to reload')))
-                        if verbose:
-                            print('Client tried to reload database too quickly! Wait ', (last_reload + reload_cooldown) - time.time(), ' seconds to reload')
+                        logger.warning('Client tried to reload database too quickly!')
                 elif args[0] == 'fields':
                     find_all_fields()
                     results = []
@@ -146,6 +153,9 @@ class PhProtocol(asyncio.Protocol):
 
                     resp = to_bytes(results)
                     self.transport.write(resp)
+                    if logger.isEnabledFor(logging.DEBUG):
+                        for i in results:
+                            logger.debug(i)
                 elif args[0] == 'query':
                     # If the user didn't specify any fields to return, return all attached to matched entries
                     if not 'return' in cmd:
@@ -157,6 +167,7 @@ class PhProtocol(asyncio.Protocol):
                     # If this isn't a syntactically-valid query, error out
                     if re.search(r'(\S*)="([^"]*)"', cmd) is None:
                         self.transport.write(to_bytes(nl('512:Illegal value. All queries need to be formed as [field]="[search]", ie universe="pennyverse".')))
+                        logger.warning('Client tried to send illegal query')
                     else:
                         # If this is a syntactically-valid query, go ahead and split it for processing
                         matches = re.finditer(r'(\S*)="([^"]*)"', cmd)
@@ -169,6 +180,7 @@ class PhProtocol(asyncio.Protocol):
 
                         if not (list(criteria.keys())[0]) in unique_fields:
                             self.transport.write(to_bytes(nl('507:Field does not exist.')))
+                            logger.warning('Desired field does not exist')
                         else:
                             _all = False
                             return_fields = []
@@ -224,38 +236,40 @@ class PhProtocol(asyncio.Protocol):
                             if not found_one_match:
                                 # If you found nothing, error out
                                 results.append(nl('502:No matches to query.'))
+                                logger.warning('Found no matches to client\'s query')
                             elif not found_field:
                                 # We found something, just not what the user wanted
                                 results.append(nl('508:Field is not present in requested entries.'))
+                                logger.warning('Desired field is not present in the entries found')
 
                             # Acknowledgement that the command finished regardless of result
                             results.append(nl('200:Ok.'))
 
-                            # Print to console for debugging purposes
-                            if verbose:
+                            if logger.isEnabledFor(logging.DEBUG):
                                 for r in results:
-                                    print(r)
+                                    logger.debug(r)
 
                             resp = to_bytes(results)
                             self.transport.write(resp)
                 # If the user inputs a quit command, terminate the connection
                 elif args[0] in ['quit', 'stop', 'exit']:
-                    print('Client has disconnected')
                     self.transport.write(to_bytes(nl('200:Bye!')))
                     self.transport.close()
+                    logging.info('Client has disconnected')
                     break
                 # If you try to put in anything other than status, fields, reload, or query
                 elif args[0] != '':
                     self.transport.write(to_bytes(nl('514:Unknown command.')))
+                    logging.warning('Client sent unknown command')
             # Any generic errors get caught and return 400
-            except Exception as e:
-                traceback.print_exc()
+            except Exception:
                 self.transport.write(to_bytes(nl('400:Server error occurred. That gets a yikes from me.')))
+                logging.exception('Exception raised')
 
 async def main(h, p):
     loop = asyncio.get_running_loop()
     server = await loop.create_server(PhProtocol, h, p)
     await server.serve_forever()
 
-print('Server is now running')
+logging.info('Server is now running')
 asyncio.run(main('0.0.0.0', port))

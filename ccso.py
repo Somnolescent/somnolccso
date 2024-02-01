@@ -88,10 +88,11 @@ class PhProtocol(asyncio.Protocol):
 
         request = data.decode('utf-8')
 
-        # Scrub command for NSCA Mosaic, the asshole client from hell
-        # Also any other clients that want to do percent encoding
+        # Lots of command scrubbing
+        # Mosaic likes to do percent encoding, seen other clients add extra line breaks to their commands
         request = unquote(request)
-        request = request.replace('/', '')
+        request = request.replace('ph ', '')
+        request = request.strip('\r\n/')
 
         # spits the raw request out into the console for debugging
         print('Client: ' + request)

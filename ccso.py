@@ -257,6 +257,9 @@ class PhProtocol(asyncio.Protocol):
                     self.transport.close()
                     logging.info('Client has disconnected')
                     break
+                # This is sent by the PH client after establishing connection
+                elif args[0] in ["id"]:
+                    self.transport.write(to_bytes(nl('200:Ok.')))
                 # If you try to put in anything other than status, fields, reload, or query
                 elif args[0] != '':
                     self.transport.write(to_bytes(nl('514:Unknown command.')))

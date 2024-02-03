@@ -66,7 +66,7 @@ def reload_db():
     with open('status.txt', 'r') as u:
         for line in u:
             server_status.append(line.rstrip('\n'))
-        server_status.append(nl('200:Ok.'))
+        server_status.append(nl('201:Database ready, read-only.'))
         logger.info('Server status read from status.txt')
     with open('siteinfo.txt', 'r') as i:
         for line in i:

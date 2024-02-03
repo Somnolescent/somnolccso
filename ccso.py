@@ -28,11 +28,13 @@ always_fields = ['name']
 
 # Fields that are labeled as indexable (you'll need at least one to be
 # able to do searches in some if not all clients)
-search_fields = ['name', 'species', 'affiliation', 'universe']
+search_fields = ['name', 'species', 'affiliation', 'universe', 'type',
+'creator']
 
 # Fields you can choose to specifically only see when doing a query
 filterable_fields = ['name', 'sex', 'species', 'affiliation', 'universe',
-'site', 'email', 'discord', 'age', 'summary', 'projects']
+'site', 'email', 'discord', 'age', 'summary', 'projects', 'type',
+'location', 'creator']
 
 logging.basicConfig(
     level=logging.INFO,
@@ -258,7 +260,7 @@ class PhProtocol(asyncio.Protocol):
                     logging.info('Client has disconnected')
                     break
                 # This is sent by the PH client after establishing connection
-                elif args[0] in ["id"]:
+                elif args[0] == 'id':
                     self.transport.write(to_bytes(nl('200:Ok.')))
                 # If you try to put in anything other than status, fields, reload, or query
                 elif args[0] != '':

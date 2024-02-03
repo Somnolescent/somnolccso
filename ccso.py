@@ -66,7 +66,7 @@ def reload_db():
     with open('status.txt', 'r') as u:
         for line in u:
             server_status.append(line.rstrip('\n'))
-        server_status.append(nl('200:Ok.'))
+        server_status.append(nl('201:Database ready, read-only.'))
         logger.info('Server status read from status.txt')
     with open('siteinfo.txt', 'r') as i:
         for line in i:
@@ -257,6 +257,9 @@ class PhProtocol(asyncio.Protocol):
                     self.transport.close()
                     logging.info('Client has disconnected')
                     break
+                # This is sent by the PH client after establishing connection
+                elif args[0] in ["id"]:
+                    self.transport.write(to_bytes(nl('200:Ok.')))
                 # If you try to put in anything other than status, fields, reload, or query
                 elif args[0] != '':
                     self.transport.write(to_bytes(nl('514:Unknown command.')))

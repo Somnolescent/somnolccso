@@ -201,6 +201,7 @@ class PhProtocol(asyncio.Protocol):
 
                             results = []
                             entry = 0
+                            index = 0
 
                             # These are to provide better error handling later on
                             # Before, we were reliant on else statements for error handling and those didn't work across an entire dataset, just one entry
@@ -219,6 +220,7 @@ class PhProtocol(asyncio.Protocol):
                                             meets_criteria = False
                                             break
                                         else:
+                                            index = index + 1
                                             meets_criteria = True
                                             found_one_match = True
                                     else:
@@ -228,12 +230,15 @@ class PhProtocol(asyncio.Protocol):
                                     if _all:
                                             for field in list(database[entry - 1]):
                                                 found_field = True
-                                                results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
+                                                # We return a separate index number that counts up by one and NOT the number of the entry in the database
+                                                # Netscape/Mosaic don't recognize the start of entries correctly if your index numbers aren't sequential, and phwin truncates fields for the same reason
+                                                # Be careful if you're writing your own CCSO server please, this sucked to fix
+                                                results.append('-200:' + str(index) + ': ' + field + ': ' + database[entry - 1][field])
                                     else:
                                         for field in return_fields:
                                             if (field in list(database[entry - 1])) and (field in filterable_fields) or _all:
                                                 found_field = True
-                                                results.append('-200:' + str(entry) + ': ' + field + ': ' + database[entry - 1][field])
+                                                results.append('-200:' + str(index) + ': ' + field + ': ' + database[entry - 1][field])
 
                             if not found_one_match:
                                 # If you found nothing, error out

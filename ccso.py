@@ -144,10 +144,11 @@ def parse_query(query):
         # this avoids repeating the always_fields implicitly
         for alf in always_fields:
             if alf not in returns:
-                logging.info(f"field {alf:r} not included, implicitly adding")
+                logging.info(f"field {repr(alf)} not included, implicitly adding")
                 returns.append(alf)
         
     for ret in returns:
+        if "all" in returns: break
         if ret not in unique_fields:
             return False, f"507:Return field {ret} not recognised"
     return True, (criteria, returns)

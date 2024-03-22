@@ -98,46 +98,58 @@ def parse_query(query):
     # assuming queries are structured as
     #       *criterion ["return" *fields]
 
-    # regex dump
-    #       criterion: r'(\S*)="([^"]*)"'
-    
+    # This is our parsers index into the string
+    # it stores where we are in the string.
     index = 0
+    # This is a dictionary wich maps our criteria names to their valus.
     criteria = {}
     # phase 1: Criteria
     # compiling this because then match accepts a start index :)
     pat_criterion = re.compile(r'(\S*)="([^"]*)"', re.ASCII) 
     whitespace = re.compile(r'\s*', re.ASCII)
-    inphase = True
-    while inphase:
-        index = whitespace.match(query, index).end()
+
+    while True:
+        index = whitespace.match(query, index).end() # skipping whitespace
         if index >= len(query):
-            break
+            # break the loop if we hit the end of the string
+            break 
         pars = pat_criterion.match(query, index)
         if pars is None:
+            # Parsing for a criteria failed
+            # we assume this means no more criteria
             break
+
+        # We progress our index beyond the parsed criteria
         index = pars.end()
+
+        # validation of provided criteria
         if pars.group(1) not in unique_fields:
             return False, f"507:Field {pars.group(1)} not recognised"
+        
+        # we're done with the criteria
         criteria[pars.group(1)] = pars.group(2)
     
     if len(criteria) == 0:
         return False, "512:Illegal Value. No search criteria provided"
 
     # phase 2: the return
+    # skipping whitespace
     index = whitespace.match(query, index).end()
     if index >= len(query):
+        # This is what fixes issue #3
         return True, (criteria, ["all"])
-
+    
+    # Now parsing the return stuff
     if not query[index:].startswith("return"):
         return False, "512: Illegal value. please don't be wrong :("
     index += len("return")
     # phase 3: return fields
-    # being lazy :)
+
+    # taking the rest of the input and splitting it by word.
     returns = query[index:].split()
+    # handling provided returns
     if len(returns) == 0:
         # swapped it over to match the current implementation
-        # logging.info("no return fields, coercing to `always_fields`")
-        # returns.extend(always_fields)
         logging.info("empty return clause, coercing to \"all\"")
         returns.append("all")
     else:
@@ -147,8 +159,12 @@ def parse_query(query):
                 logging.info(f"field {repr(alf)} not included, implicitly adding")
                 returns.append(alf)
         
+    # checking returns
+    if "all" in returns:
+        # early return, coerced to just ["all"] because I'm lazy.
+        return True, (criteria, ["all"])
+    # validating each return field for validity
     for ret in returns:
-        if "all" in returns: break
         if ret not in unique_fields:
             return False, f"507:Return field {ret} not recognised"
     return True, (criteria, returns)
